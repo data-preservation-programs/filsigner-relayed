@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
-	"github.com/data-preservation-programs/filsigner-relayed/config"
+	"github.com/data-preservation-programs/filsigner-relayed/model"
 	"github.com/filecoin-project/go-address"
 	cborutil "github.com/filecoin-project/go-cbor-util"
 	filmarket "github.com/filecoin-project/go-state-types/builtin/v9/market"
@@ -22,18 +22,18 @@ import (
 	"time"
 )
 
-type ExportedPrivateKey = string
+type WalletPrivateKey = string
 
 type Server struct {
 	host              host.Host
 	relays            []peer.AddrInfo
 	allowedRequesters []peer.ID
-	keyMap            map[address.Address]ExportedPrivateKey
+	keyMap            map[address.Address]WalletPrivateKey
 }
 
-func NewServer(privateKey crypto.PrivKey, allowedRequesters []peer.ID, privateKeys []ExportedPrivateKey) (*Server, error) {
-	keyMap := make(map[address.Address]ExportedPrivateKey)
-	for _, key := range privateKeys {
+func NewServer(privateKey crypto.PrivKey, allowedRequesters []peer.ID, walletKeys []WalletPrivateKey, relays []peer.AddrInfo) (*Server, error) {
+	keyMap := make(map[address.Address]WalletPrivateKey)
+	for _, key := range walletKeys {
 		addr, err := wallet.PublicKey(key)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to resolve private key to public key (address)")
@@ -53,16 +53,28 @@ func NewServer(privateKey crypto.PrivKey, allowedRequesters []peer.ID, privateKe
 
 	return &Server{
 		host:              host,
-		relays:            config.GetDefaultRelayInfo(),
+		relays:            relays,
 		allowedRequesters: allowedRequesters,
 		keyMap:            keyMap,
 	}, nil
 }
 
+func SendError(stream network.Stream, code model.StatusCode, message string) {
+	log := logging.Logger("server")
+	log.Errorw("sending error", "code", code, "message", message)
+	err := cborutil.WriteCborRPC(stream, &model.SignerResponse{
+		Code:    code,
+		Message: message,
+	})
+	if err != nil {
+		log.Errorw("failed to send error", "error", err)
+	}
+}
+
 func (s Server) Start(ctx context.Context) error {
 	log := logging.Logger("server")
 	// Setup stream handler
-	s.host.SetStreamHandler("/filsigner-relayed/signproposal", func(stream network.Stream) {
+	s.host.SetStreamHandler("/filsigner-relayed/signproposal/v1", func(stream network.Stream) {
 		log := log.With("remote", stream.Conn().RemotePeer().String())
 		log.Info("got sign proposal request")
 		defer stream.Close()
@@ -76,14 +88,14 @@ func (s Server) Start(ctx context.Context) error {
 			}
 		}
 		if !allowed {
-			log.Error("request is not from allowed requesters")
+			SendError(stream, model.UnauthorizedRequester, "request is not from allowed requesters")
 			return
 		}
 
 		// Read the proposal bytes
 		request, err := io.ReadAll(stream)
 		if err != nil {
-			log.Errorw("failed to read request", "error", err)
+			SendError(stream, model.ReadStreamError, err.Error())
 			return
 		}
 
@@ -91,7 +103,7 @@ func (s Server) Start(ctx context.Context) error {
 		proposal := new(filmarket.DealProposal)
 		err = cbornode.DecodeInto(request, proposal)
 		if err != nil {
-			log.Errorw("failed to decode request", "error", err)
+			SendError(stream, model.DecodeRequestError, err.Error())
 			return
 		}
 
@@ -100,39 +112,50 @@ func (s Server) Start(ctx context.Context) error {
 		// Verify the original proposal is properly marshalled
 		proposalBytes, err := cborutil.Dump(proposal)
 		if err != nil {
-			log.Errorw("failed to marshal proposal for verification", "error", err)
+			SendError(stream, model.EncodeRequestError, err.Error())
 			return
 		}
 
 		if !bytes.Equal(request, proposalBytes) {
-			log.Error("proposal is not properly marshalled as remarshalled proposal does not match original")
+			SendError(stream, model.ProposalRemarshalMismatch, "proposal remarshalled does not match the original proposal bytes")
 			return
 		}
 
 		// Sign the proposal
 		privateKey, ok := s.keyMap[proposal.Client]
 		if !ok {
-			log.Errorw("private key not found for the proposal", "proposal", proposal)
+			SendError(stream, model.WalletKeyNotFound, "private key not found for the proposal client address "+proposal.Client.String())
 			return
 		}
 
 		signature, err := wallet.WalletSign(privateKey, proposalBytes)
 		if err != nil {
-			log.Errorw("failed to sign the proposal", "error", err)
+			SendError(stream, model.WalletSignError, err.Error())
 			return
 		}
 
 		// Marshall the signature
 		signatureBytes, err := signature.MarshalBinary()
 		if err != nil {
-			log.Errorw("failed to marshal the signature", "error", err)
+			SendError(stream, model.MarshalSignatureError, err.Error())
+		}
+
+		response := &model.SignerResponse{
+			Code:      model.Success,
+			Signature: signatureBytes,
+		}
+
+		// Marshall the response
+		responseBytes, err := cborutil.Dump(response)
+		if err != nil {
+			SendError(stream, model.EncodeResponseError, err.Error())
 			return
 		}
 
 		// Send back the signature
-		_, err = stream.Write(signatureBytes)
+		_, err = stream.Write(responseBytes)
 		if err != nil {
-			log.Errorw("failed to sent the signature", "error", err)
+			log.Errorw("failed to sent the response back", "error", err)
 			return
 		}
 	})
@@ -186,5 +209,7 @@ func (s Server) Start(ctx context.Context) error {
 			}
 		}()
 	}
+
+	<-ctx.Done()
 	return nil
 }

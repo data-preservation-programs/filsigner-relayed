@@ -2,7 +2,7 @@ package client
 
 import (
 	"context"
-	"github.com/data-preservation-programs/filsigner-relayed/config"
+	"github.com/data-preservation-programs/filsigner-relayed/model"
 	cborutil "github.com/filecoin-project/go-cbor-util"
 	filmarket "github.com/filecoin-project/go-state-types/builtin/v9/market"
 	filcrypto "github.com/filecoin-project/go-state-types/crypto"
@@ -15,7 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"io"
+	"time"
 )
 
 type Client struct {
@@ -37,34 +37,47 @@ func (c Client) SignProposal(ctx context.Context, dest peer.ID, proposal filmark
 	}
 
 	c.host.Peerstore().AddAddrs(dest, targetAddrs, peerstore.PermanentAddrTTL)
-	stream, err := c.host.NewStream(network.WithUseTransient(ctx, "signproposal"), dest, "/filsigner-relayed/signproposal")
+
+	// Marshal and send out the proposal
+	proposalBytes, err := cborutil.Dump(&proposal)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshall proposal")
+	}
+
+	stream, err := c.host.NewStream(network.WithUseTransient(ctx, "signproposal"), dest, "/filsigner-relayed/signproposal/v1")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open stream")
 	}
 
 	defer stream.Close()
-
-	// Marshal and send out the proposal
-	proposalBytes, err := cborutil.Dump(proposal)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshall proposal")
+	if deadline, ok := ctx.Deadline(); ok {
+		stream.SetDeadline(deadline)
+		defer stream.SetDeadline(time.Time{})
 	}
 
 	_, err = stream.Write(proposalBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to write proposal to stream")
 	}
+	stream.CloseWrite()
 
-	// Read the response
-	response, err := io.ReadAll(stream)
+	response := new(model.SignerResponse)
+	err = cborutil.ReadCborRPC(stream, response)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response")
+		return nil, errors.Wrap(err, "failed to unmarshal response")
+	}
+
+	if response.Code != model.Success {
+		return nil, &RequestError{
+			StatusCode: response.Code,
+			Message:    response.Message,
+		}
 	}
 
 	signature := new(filcrypto.Signature)
 
 	// Verify the signature
-	valid, err := wallet.WalletVerify(proposal.Client, proposalBytes, response)
+	valid, err := wallet.WalletVerify(proposal.Client, proposalBytes, response.Signature)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to verify signature")
 	}
@@ -73,7 +86,7 @@ func (c Client) SignProposal(ctx context.Context, dest peer.ID, proposal filmark
 		return nil, errors.New("signature is not valid")
 	}
 
-	err = signature.UnmarshalBinary(response)
+	err = signature.UnmarshalBinary(response.Signature)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal response signature")
 	}
@@ -82,7 +95,7 @@ func (c Client) SignProposal(ctx context.Context, dest peer.ID, proposal filmark
 
 // NewClient creates a new client with the default relays
 // @param privateKey the private key to use for the libp2p host
-func NewClient(privateKey crypto.PrivKey) (*Client, error) {
+func NewClient(privateKey crypto.PrivKey, relays []peer.AddrInfo) (*Client, error) {
 	host, err := libp2p.New(
 		libp2p.NoListenAddrs,
 		libp2p.EnableRelay(),
@@ -92,15 +105,15 @@ func NewClient(privateKey crypto.PrivKey) (*Client, error) {
 		return nil, errors.Wrap(err, "failed to create libp2p host")
 	}
 
-	return NewClientWithHost(host)
+	return NewClientWithHost(host, relays)
 }
 
 // NewClientWithHost creates a new client with the default relays
 // @param libp2p the libp2p host. This libp2p instance must have Relay enabled
-func NewClientWithHost(host host.Host) (*Client, error) {
+func NewClientWithHost(host host.Host, relays []peer.AddrInfo) (*Client, error) {
 	client := &Client{
 		host:   host,
-		relays: config.GetDefaultRelayInfo(),
+		relays: relays,
 	}
 
 	return client, nil

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	client2 "github.com/data-preservation-programs/filsigner-relayed/client"
+	"github.com/data-preservation-programs/filsigner-relayed/config"
 	"github.com/data-preservation-programs/filsigner-relayed/server"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -18,9 +19,11 @@ import (
 
 func main() {
 	log := logging.Logger("server")
+	address.CurrentNetwork = address.Mainnet
 	allowedRequestersArg := new(cli.StringSlice)
 	signKeysArg := new(cli.StringSlice)
 	identityKeyArg := new(string)
+	relayInfos := new(cli.StringSlice)
 
 	destination := new(string)
 	client := new(string)
@@ -54,6 +57,12 @@ func main() {
 						Destination: client,
 						Required:    true,
 					},
+					&cli.StringSliceFlag{
+						Name:        "relay-info",
+						Usage:       "The relay info to use to connect to the allowed requesters - this will override the default relay servers from SPADE",
+						Destination: relayInfos,
+						EnvVars:     []string{"RELAY_INFOS"},
+					},
 				},
 				Action: func(c *cli.Context) error {
 					identityKeyBytes, err := base64.StdEncoding.DecodeString(*identityKeyArg)
@@ -76,7 +85,22 @@ func main() {
 						return errors.Wrap(err, "cannot decode client address")
 					}
 
-					client, err := client2.NewClient(identityKey)
+					var relays []peer.AddrInfo
+					if len(relayInfos.Value()) == 0 {
+						relays = config.GetDefaultRelayInfo()
+					} else {
+						relays = make([]peer.AddrInfo, len(relayInfos.Value()))
+						for i, relayInfo := range relayInfos.Value() {
+							relay, err := peer.AddrInfoFromString(relayInfo)
+							if err != nil {
+								return errors.Wrapf(err, "cannot decode relay info %s", relayInfo)
+							}
+
+							relays[i] = *relay
+						}
+					}
+
+					client, err := client2.NewClient(identityKey, relays)
 					if err != nil {
 						return errors.Wrap(err, "cannot create client")
 					}
@@ -86,7 +110,7 @@ func main() {
 						PieceSize:            256,
 						VerifiedDeal:         true,
 						Client:               clientAddr,
-						Provider:             address.Undef,
+						Provider:             address.TestAddress,
 						Label:                filmarket.EmptyDealLabel,
 						StartEpoch:           0,
 						EndEpoch:             0,
@@ -94,7 +118,7 @@ func main() {
 						ProviderCollateral:   abi.TokenAmount{},
 						ClientCollateral:     abi.TokenAmount{},
 					}
-					
+
 					signature, err := client.SignProposal(c.Context, destinationPeer, proposal)
 					if err != nil {
 						return errors.Wrap(err, "cannot sign proposal")
@@ -137,6 +161,12 @@ func main() {
 						EnvVars:     []string{"SIGN_KEYS"},
 						Required:    true,
 					},
+					&cli.StringSliceFlag{
+						Name:        "relay-info",
+						Usage:       "[Local testing only] The relay info to use to connect to the allowed requesters - this will override the default relay servers from SPADE",
+						Destination: relayInfos,
+						EnvVars:     []string{"RELAY_INFOS"},
+					},
 				},
 				Action: func(c *cli.Context) error {
 					identityKeyBytes, err := base64.StdEncoding.DecodeString(*identityKeyArg)
@@ -157,7 +187,22 @@ func main() {
 						}
 					}
 
-					server, err := server.NewServer(identityKey, allowedRequesters, signKeysArg.Value())
+					var relays []peer.AddrInfo
+					if len(relayInfos.Value()) == 0 {
+						relays = config.GetDefaultRelayInfo()
+					} else {
+						relays = make([]peer.AddrInfo, len(relayInfos.Value()))
+						for i, relayInfo := range relayInfos.Value() {
+							relay, err := peer.AddrInfoFromString(relayInfo)
+							if err != nil {
+								return errors.Wrapf(err, "cannot decode relay info %s", relayInfo)
+							}
+
+							relays[i] = *relay
+						}
+					}
+
+					server, err := server.NewServer(identityKey, allowedRequesters, signKeysArg.Value(), relays)
 					if err != nil {
 						return errors.Wrap(err, "cannot create new server")
 					}

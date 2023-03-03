@@ -8,12 +8,12 @@ import (
 func GetDefaultRelayInfo() []peer.AddrInfo {
 	relays := make([]peer.AddrInfo, 2)
 
-	naRelayInfo, err := peer.AddrInfoFromString("/ip4/52.37.148.89/tcp/4001/p2p/12D3KooWBVheEM7TdvfQHNLsGy39PFuDSXnnkHyXfgH5uD1pheqv")
+	naRelayInfo, err := peer.AddrInfoFromString("/dns4/relay-na.spade.services/tcp/4001/p2p/12D3KooWBVheEM7TdvfQHNLsGy39PFuDSXnnkHyXfgH5uD1pheqv")
 	if err != nil {
 		log.Logger("config").Fatalf("failed to parse naRelayInfo: %v", err)
 	}
 
-	euRelayInfo, err := peer.AddrInfoFromString("/ip4/18.196.26.250/tcp/4001/p2p/12D3KooWGxyLaT4h4XYYrcCpRVHh5N3WNTLJmCtaKHrfVz7sfTjM")
+	euRelayInfo, err := peer.AddrInfoFromString("/dns4/relay-eu.spade.services/tcp/4001/p2p/12D3KooWGxyLaT4h4XYYrcCpRVHh5N3WNTLJmCtaKHrfVz7sfTjM")
 	if err != nil {
 		log.Logger("config").Fatalf("failed to parse euRelayInfo: %v", err)
 	}
