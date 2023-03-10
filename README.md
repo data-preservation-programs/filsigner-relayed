@@ -1,5 +1,27 @@
 # flisigner-relayed
 
+## Installation
+```
+go install github.com/data-preservation/programs/filsigner-relayed/cmd/filsigner@latest
+```
+
+## Usage
+```shell
+$ ./filsigner run -h
+NAME:
+   filsigner run - Run the filsigner server to sign deal proposals
+
+USAGE:
+   filsigner run [command options] [arguments...]
+
+OPTIONS:
+   --allowed-requester value, -r value [ --allowed-requester value, -r value ]  The peer ID of the allowed requester [$ALLOWED_REQUESTERS]
+   --identity-key value, -k value                                               The base64 encoded private key of the peer to use as the identity [$IDENTITY_KEY]
+   --sign-key value, -s value [ --sign-key value, -s value ]                    The private key of the address to sign with [$SIGN_KEYS]
+   --relay-info value [ --relay-info value ]                                    [Local testing only] The relay info to use to connect to the allowed requesters - this will override the default relay servers from SPADE [$RELAY_INFOS]
+   --help, -h                                                                   show help
+```
+
 ## Local testing
 Below should be put into unit tests, but for now, here's how to test locally.
 

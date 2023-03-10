@@ -74,7 +74,7 @@ func SendError(stream network.Stream, code model.StatusCode, message string) {
 func (s Server) Start(ctx context.Context) error {
 	log := logging.Logger("server")
 	// Setup stream handler
-	s.host.SetStreamHandler("/filsigner-relayed/signproposal/v1", func(stream network.Stream) {
+	s.host.SetStreamHandler("/cmd/signproposal/v1", func(stream network.Stream) {
 		log := log.With("remote", stream.Conn().RemotePeer().String())
 		log.Info("got sign proposal request")
 		defer stream.Close()
