@@ -6,6 +6,7 @@ go install github.com/data-preservation/programs/filsigner-relayed/cmd/filsigner
 ```
 
 ## Usage
+### Run as native binary
 ```shell
 $ ./filsigner run -h
 NAME:
@@ -20,6 +21,14 @@ OPTIONS:
    --sign-key value, -s value [ --sign-key value, -s value ]                    The private key of the address to sign with [$SIGN_KEYS]
    --relay-info value [ --relay-info value ]                                    [Local testing only] The relay info to use to connect to the allowed requesters - this will override the default relay servers from SPADE [$RELAY_INFOS]
    --help, -h                                                                   show help
+```
+### Run as docker container
+```shell
+$ docker pull datapreservationprogram/filsigner-relayed:latest
+$ ALLOWED_REQUESTERS=<SPADE_PEER>\
+    IDENTITY_KEY=<IDENTITY_PRIVATE_KEY>\
+    SIGN_KEYS=<WALLET_PRIVATE_KEY_1>,<AND_MORE>\
+    docker run -e ALLOWED_REQUESTERS -e IDENTITY_KEY -e SIGN_KEYS datapreservationprogram/filsigner-relayed:latest
 ```
 
 ## Local testing
