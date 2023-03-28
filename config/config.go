@@ -22,3 +22,5 @@ func GetDefaultRelayInfo() []peer.AddrInfo {
 	relays[1] = *euRelayInfo
 	return relays
 }
+
+const ProtocolName = "/cmd/signproposal/poc"

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"github.com/data-preservation-programs/filsigner-relayed/config"
 	"github.com/data-preservation-programs/filsigner-relayed/model"
 	cborutil "github.com/filecoin-project/go-cbor-util"
 	filmarket "github.com/filecoin-project/go-state-types/builtin/v9/market"
@@ -44,7 +45,7 @@ func (c Client) SignProposal(ctx context.Context, dest peer.ID, proposal filmark
 		return nil, errors.Wrap(err, "failed to marshall proposal")
 	}
 
-	stream, err := c.host.NewStream(network.WithUseTransient(ctx, "signproposal"), dest, "/cmd/signproposal/v1")
+	stream, err := c.host.NewStream(network.WithUseTransient(ctx, "signproposal"), dest, config.ProtocolName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open stream")
 	}
