@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	client2 "github.com/data-preservation-programs/filsigner-relayed/client"
 	"github.com/data-preservation-programs/filsigner-relayed/config"
 	"github.com/data-preservation-programs/filsigner-relayed/server"
@@ -215,6 +217,25 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "generate-peer",
+				Usage: "generate a new peer id with private key",
+				Action: func(c *cli.Context) error {
+					privateStr, publicStr, peerStr, err := GenerateNewPeer()
+					if err != nil {
+						return errors.Wrap(err, "cannot generate new peer")
+					}
+
+					//nolint:forbidigo
+					{
+						fmt.Println("New peer generated using ed25519, keys are encoded in base64")
+						fmt.Println("peer id:     ", peerStr.String())
+						fmt.Println("public key:  ", publicStr)
+						fmt.Println("private key: ", privateStr)
+					}
+					return nil
+				},
+			},
 		},
 	}
 
@@ -222,4 +243,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to run filsigner: %v", err)
 	}
+}
+func GenerateNewPeer() (string, string, peer.ID, error) {
+	private, public, err := crypto.GenerateEd25519Key(rand.Reader)
+	if err != nil {
+		return "", "", "", errors.Wrap(err, "cannot generate new peer")
+	}
+
+	peerID, err := peer.IDFromPublicKey(public)
+	if err != nil {
+		return "", "", "", errors.Wrap(err, "cannot generate peer id")
+	}
+
+	privateBytes, err := crypto.MarshalPrivateKey(private)
+	if err != nil {
+		return "", "", "", errors.Wrap(err, "cannot marshal private key")
+	}
+
+	privateStr := base64.StdEncoding.EncodeToString(privateBytes)
+
+	publicBytes, err := crypto.MarshalPublicKey(public)
+	if err != nil {
+		return "", "", "", errors.Wrap(err, "cannot marshal public key")
+	}
+
+	publicStr := base64.StdEncoding.EncodeToString(publicBytes)
+	return privateStr, publicStr, peerID, nil
 }
