@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/pkg/errors"
+	"github.com/ybbus/jsonrpc/v3"
 	"io"
 	"time"
 )
@@ -32,6 +33,18 @@ type Server struct {
 	keyMap            map[address.Address]WalletPrivateKey
 }
 
+func resolveShortID(addr address.Address) (address.Address, error) {
+	ctx := context.TODO()
+	client := jsonrpc.NewClient("https://api.node.glif.io/rpc/v0")
+	var shortAddr string
+	err := client.CallFor(ctx, &shortAddr, "Filecoin.StateLookupID", addr.String(), nil)
+	if err != nil {
+		return address.Undef, errors.Wrap(err, "failed to resolve short id")
+	}
+
+	return address.NewFromString(shortAddr)
+}
+
 func NewServer(privateKey crypto.PrivKey, allowedRequesters []peer.ID, walletKeys []WalletPrivateKey, relays []peer.AddrInfo) (*Server, error) {
 	keyMap := make(map[address.Address]WalletPrivateKey)
 	for _, key := range walletKeys {
@@ -41,6 +54,11 @@ func NewServer(privateKey crypto.PrivKey, allowedRequesters []peer.ID, walletKey
 		}
 
 		keyMap[addr] = key
+		shortAddr, err := resolveShortID(addr)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to resolve short id")
+		}
+		keyMap[shortAddr] = key
 	}
 
 	host, err := libp2p.New(
