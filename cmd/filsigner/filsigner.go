@@ -16,8 +16,16 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	"net/http"
 	"os"
 )
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	// Set response header to 200 OK
+	w.WriteHeader(http.StatusOK)
+	// Write a message to the response body
+	fmt.Fprint(w, "OK")
+}
 
 func main() {
 	log := logging.Logger("server")
@@ -208,6 +216,18 @@ func main() {
 					if err != nil {
 						return errors.Wrap(err, "cannot create new server")
 					}
+
+					go func() {
+						// Register the healthHandler function for the /health route
+						http.HandleFunc("/health", healthHandler)
+
+						// Start the HTTP server on port 8088
+						fmt.Println("Listening on :8088...")
+						err := http.ListenAndServe(":8088", nil)
+						if err != nil {
+							log.Fatal(err)
+						}
+					}()
 
 					err = server.Start(c.Context)
 					if err != nil {
