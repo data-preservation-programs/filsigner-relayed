@@ -219,7 +219,7 @@ func main() {
 
 					go func() {
 						// Register the healthHandler function for the /health route
-						http.HandleFunc("/health", healthHandler)
+						http.HandleFunc("/healthz", healthHandler)
 
 						// Start the HTTP server on port 8088
 						fmt.Println("Listening on :8088...")
