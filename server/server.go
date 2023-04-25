@@ -218,12 +218,12 @@ func (s Server) Start(ctx context.Context) error {
 
 					log.Infow("reserved spot", "reservation", reservation)
 					waitTime.Reset()
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(waitTime.Min):
-						continue
-					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(waitTime.Min):
+					continue
 				}
 			}
 		}()
