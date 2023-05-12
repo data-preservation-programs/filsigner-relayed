@@ -1,4 +1,4 @@
-# flisigner-relayed
+# filsigner-relayed
 
 ## Installation
 ```
