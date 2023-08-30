@@ -2,7 +2,7 @@
 
 ## Installation
 ```
-go install github.com/data-preservation/programs/filsigner-relayed/cmd/filsigner@latest
+go install github.com/data-preservation-programs/filsigner-relayed/cmd/filsigner@latest
 ```
 
 ## Usage
